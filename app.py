@@ -78,7 +78,7 @@ if st.button("🚀 Bắt đầu chấm bài", type="primary"):
 
                 # Gửi trực tiếp âm thanh và chỉ dẫn tới mô hình Gemini
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash",
+                   model="gemini-3.8-flash",
                     contents=[
                         types.Part.from_bytes(
                             data=audio_bytes,

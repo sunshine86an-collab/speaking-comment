@@ -35,6 +35,7 @@ with st.sidebar:
     st.divider()
     st.subheader("📋 Thông Tin Học Sinh")
     student_name = st.text_input("Tên học sinh *:", placeholder="Ví dụ: Nguyễn Minh Anh")
+    class_name = st.text_input("Lớp *:", placeholder="Ví dụ: 8A3")
     grade_level = st.selectbox("Khối lớp:", ["Lớp 6", "Lớp 7", "Lớp 8", "Lớp 9"], index=2)
     topic = st.text_input("Chủ đề bài nói:", placeholder="Ví dụ: Unit 3 - Teenagers")
 

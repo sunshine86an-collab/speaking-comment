@@ -132,37 +132,69 @@ with tab_grade:
                 except Exception as e:
                     st.error(f"Đã xảy ra lỗi khi kết nối AI: {e}")
 
-# 4. Tab Lịch Sử: Quản lý theo tên từng học sinh
+# 4. Tab Lịch Sử: Bảo vệ bằng Mật khẩu Giáo viên
 with tab_history:
-    st.subheader("📚 Danh sách các bài đã chấm")
-    
-    if not st.session_state.history:
-        st.info("Chưa có bài chấm nào trong phiên làm việc hiện tại.")
+    st.subheader("🔒 Khu Vực Dành Cho Giáo Viên")
+
+    # Lấy mật khẩu từ Secrets (mặc định dự phòng nếu chưa cài đặt)
+    teacher_pass = st.secrets.get("TEACHER_PASSWORD", "123456")
+
+    # Kiểm tra trạng thái đăng nhập của giáo viên trong phiên
+    if "is_teacher" not in st.session_state:
+        st.session_state.is_teacher = False
+
+    if not st.session_state.is_teacher:
+        st.info("Vui lòng nhập mật mã quản trị để truy cập lịch sử bài chấm của toàn bộ học sinh.")
+        col_pwd, col_btn = st.columns([3, 1])
+        with col_pwd:
+            input_pwd = st.text_input("Nhập mật khẩu giáo viên:", type="password", key="teacher_pwd_input")
+        with col_btn:
+            st.write("") # Căn chỉnh lề dọc cho nút bấm
+            if st.button("Mở khóa", type="primary"):
+                if input_pwd == teacher_pass:
+                    st.session_state.is_teacher = True
+                    st.rerun()
+                else:
+                    st.error("Mật khẩu không chính xác!")
     else:
-        # Bộ lọc tìm kiếm theo học sinh
-        all_students = sorted(list(set(item["student"] for item in st.session_state.history)))
-        selected_filter = st.selectbox("🔍 Lọc xem theo tên học sinh:", ["Tất cả học sinh"] + all_students)
+        # Giao diện khi giáo viên đã mở khóa thành công
+        col_title, col_logout = st.columns([4, 1])
+        with col_title:
+            st.success("✅ Đã xác thực quyền Giáo viên")
+        with col_logout:
+            if st.button("Đăng xuất 🔒"):
+                st.session_state.is_teacher = False
+                st.rerun()
 
-        filtered_history = [
-            item for item in st.session_state.history 
-            if selected_filter == "Tất cả học sinh" or item["student"] == selected_filter
-        ]
+        st.markdown("---")
 
-        # Nút xuất file tải về máy cho giáo viên
-        col_export, _ = st.columns([1, 3])
-        with col_export:
-            json_data = json.dumps(filtered_history, ensure_ascii=False, indent=2)
-            st.download_button(
-                label="📥 Tải lịch sử chấm (.json)",
-                data=json_data,
-                file_name=f"lich_su_cham_speaking_{datetime.now().strftime('%Y%m%d')}.json",
-                mime="application/json"
-            )
+        if not st.session_state.history:
+            st.info("Chưa có bài chấm nào trong phiên làm việc hiện tại.")
+        else:
+            # Bộ lọc học sinh
+            all_students = sorted(list(set(item["student"] for item in st.session_state.history)))
+            selected_filter = st.selectbox("🔍 Lọc xem theo tên học sinh:", ["Tất cả học sinh"] + all_students)
 
-        st.markdown(f"**Tổng số bài ghi nhận:** {len(filtered_history)}")
-        
-        # Hiển thị từng bài dạng thẻ mở rộng (expander)
-        for idx, item in enumerate(reversed(filtered_history)):
-            header = f"👤 {item['student']} - {item['grade']} | Chủ đề: {item['topic']} ({item['time']})"
-            with st.expander(header, expanded=(idx == 0)):
-                st.markdown(item["result"])
+            filtered_history = [
+                item for item in st.session_state.history 
+                if selected_filter == "Tất cả học sinh" or item["student"] == selected_filter
+            ]
+
+            # Nút xuất dữ liệu
+            col_export, _ = st.columns([2, 2])
+            with col_export:
+                json_data = json.dumps(filtered_history, ensure_ascii=False, indent=2)
+                st.download_button(
+                    label="📥 Tải lịch sử chấm (.json)",
+                    data=json_data,
+                    file_name=f"lich_su_cham_speaking_{datetime.now().strftime('%Y%m%d')}.json",
+                    mime="application/json"
+                )
+
+            st.markdown(f"**Tổng số bài ghi nhận:** {len(filtered_history)}")
+
+            # Hiển thị các bài chấm
+            for idx, item in enumerate(reversed(filtered_history)):
+                header = f"👤 {item['student']} - {item['grade']} | Chủ đề: {item['topic']} ({item['time']})"
+                with st.expander(header, expanded=(idx == 0)):
+                    st.markdown(item["result"])

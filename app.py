@@ -3,7 +3,7 @@ from google import genai
 from google.genai import types
 from datetime import datetime
 import json
-
+import time
 # 1. Cấu hình giao diện trang web
 st.set_page_config(
     page_title="AI Chấm Speaking THCS",
@@ -98,20 +98,42 @@ with tab_grade:
 
                     user_prompt = f"Chấm bài nói của học sinh: {student_name} ({grade_level}), Đề tài: {topic or 'Tự do'}."
 
-                    response = client.models.generate_content(
-                        model="gemini-3.8-flash",
-                        contents=[
-                            types.Part.from_bytes(
-                                data=audio_bytes,
-                                mime_type=getattr(audio_source, "type", "audio/wav") or "audio/mp3",
-                            ),
-                            user_prompt
-                        ],
-                        config=types.GenerateContentConfig(
-                            system_instruction=system_instruction,
-                            temperature=0.2,
-                        )
-                    )
+                   # Danh sách các model để tự động chuyển đổi nếu bị quá tải 503
+                    candidate_models = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.5-pro"]
+                    response = None
+                    last_error = None
+
+                    # Tự động thử lại hoặc đổi sang model khác
+                    for current_model in candidate_models:
+                        for attempt in range(2):
+                            try:
+                                response = client.models.generate_content(
+                                    model=current_model,
+                                    contents=[
+                                        types.Part.from_bytes(
+                                            data=audio_bytes,
+                                            mime_type=getattr(audio_source, "type", "audio/wav") or "audio/mp3",
+                                        ),
+                                        user_prompt
+                                    ],
+                                    config=types.GenerateContentConfig(
+                                        system_instruction=system_instruction,
+                                        temperature=0.2,
+                                    )
+                                )
+                                break
+                            except Exception as err:
+                                last_error = err
+                                if "503" in str(err):
+                                    time.sleep(2)  # Đợi 2 giây rồi thử lại
+                                    continue
+                                else:
+                                    raise err
+                        if response is not None:
+                            break
+
+                    if response is None:
+                        raise last_error
 
                     result_text = response.text
                     timestamp_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")

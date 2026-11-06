@@ -114,7 +114,8 @@ with tab_grade:
                     user_prompt = f"Chấm bài nói của học sinh: {student_name.strip()} ({grade_level}), Đề tài: {topic.strip() or 'Tự do'}."
 
                     # Danh sách các model dự phòng khi có tải cao (503)
-                    candidate_models = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.5-pro"]
+                   # ĐOẠN CODE MỚI:
+                    candidate_models = ["gemini-2.5-flash", "gemini-3.8-flash"]
                     response = None
                     last_error = None
 

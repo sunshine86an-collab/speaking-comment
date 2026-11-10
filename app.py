@@ -37,8 +37,9 @@ st.title("🎙️ Hệ Thống Chấm Chữa Speaking Tiếng Anh THCS")
 st.caption("Ứng dụng phân tích phát âm, ngữ pháp và chấm điểm bài nói từ tệp âm thanh hoặc ghi âm trực tiếp.")
 
 # 3. Quản lý API Key & Thông tin học sinh ở thanh bên (Sidebar)
-api_key = st.secrets.get("GEMINI_API_KEY", "")
-
+# Cho phép nhận 1 key hoặc nhiều key ngăn cách bởi dấu phẩy
+raw_keys = st.secrets.get("GEMINI_API_KEY", "")
+api_keys = [k.strip() for k in raw_keys.split(",") if k.strip()]
 with st.sidebar:
     st.header("⚙️ Cấu Hình")
     if not api_key:
@@ -116,37 +117,52 @@ with tab_grade:
                     # Danh sách các model dự phòng khi có tải cao (503)
                    # ĐOẠN CODE MỚI:
                     candidate_models = ["gemini-2.5-flash", "gemini-3.8-flash"]
-                    response = None
+               response = None
                     last_error = None
+                    candidate_models = ["gemini-3.8-flash", "gemini-3-flash"]
 
-                    # Cơ chế thử lại và luân chuyển model
-                    for current_model in candidate_models:
-                        for attempt in range(2):
-                            try:
-                                response = client.models.generate_content(
-                                    model=current_model,
-                                    contents=[
-                                        types.Part.from_bytes(
-                                            data=audio_bytes,
-                                            mime_type=getattr(audio_source, "type", "audio/wav") or "audio/mp3",
-                                        ),
-                                        user_prompt
-                                    ],
-                                    config=types.GenerateContentConfig(
-                                        system_instruction=system_instruction,
-                                        temperature=0.2,
-                                    )
-                                )
+                    # Thử lần lượt qua từng API Key và từng Model
+                    for key in api_keys:
+                        try:
+                            client = genai.Client(api_key=key)
+                            for current_model in candidate_models:
+                                for attempt in range(2):
+                                    try:
+                                        response = client.models.generate_content(
+                                            model=current_model,
+                                            contents=[
+                                                types.Part.from_bytes(
+                                                    data=audio_bytes,
+                                                    mime_type=getattr(audio_source, "type", "audio/wav") or "audio/mp3",
+                                                ),
+                                                user_prompt
+                                            ],
+                                            config=types.GenerateContentConfig(
+                                                system_instruction=system_instruction,
+                                                temperature=0.2,
+                                            )
+                                        )
+                                        break
+                                    except Exception as err:
+                                        last_error = err
+                                        if "503" in str(err):
+                                            time.sleep(2)
+                                            continue
+                                        elif "404" in str(err):
+                                            break # Bỏ qua model nếu không tồn tại
+                                        else:
+                                            raise err
+                                if response is not None:
+                                    break
+                            if response is not None:
                                 break
-                            except Exception as err:
-                                last_error = err
-                                if "503" in str(err):
-                                    time.sleep(2)
-                                    continue
-                                else:
-                                    raise err
-                        if response is not None:
-                            break
+                        except Exception as err:
+                            last_error = err
+                            # Nếu key này bị hết hạn ngạch (429), nhảy sang key dự phòng tiếp theo
+                            if "429" in str(err):
+                                continue
+                            else:
+                                raise err
 
                     if response is None:
                         raise last_error

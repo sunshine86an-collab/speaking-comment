@@ -17,7 +17,6 @@ st.set_page_config(
 HISTORY_FILE = "history_data.json"
 
 def load_history():
-    """Đọc dữ liệu lịch sử bài chấm dùng chung"""
     if os.path.exists(HISTORY_FILE):
         try:
             with open(HISTORY_FILE, "r", encoding="utf-8") as f:
@@ -27,7 +26,6 @@ def load_history():
     return []
 
 def save_entry(entry):
-    """Lưu bài chấm mới vào tệp dùng chung"""
     current_data = load_history()
     current_data.append(entry)
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
@@ -36,20 +34,22 @@ def save_entry(entry):
 st.title("🎙️ Hệ Thống Chấm Chữa Speaking Tiếng Anh THCS")
 st.caption("Ứng dụng phân tích phát âm, ngữ pháp và chấm điểm bài nói từ tệp âm thanh hoặc ghi âm trực tiếp.")
 
-# 3. Quản lý API Key & Thông tin học sinh ở thanh bên (Sidebar)
-# Cho phép nhận 1 key hoặc nhiều key ngăn cách bởi dấu phẩy
+# 3. Quản lý API Key & Thông tin học sinh ở thanh bên
 raw_keys = st.secrets.get("GEMINI_API_KEY", "")
 api_keys = [k.strip() for k in raw_keys.split(",") if k.strip()]
+
 with st.sidebar:
     st.header("⚙️ Cấu Hình")
-    if not api_key:
-        api_key = st.text_input(
+    if not api_keys:
+        single_key = st.text_input(
             "Nhập Gemini API Key:", 
             type="password", 
-            help="Lấy khóa API miễn phí từ aistudio.google.com"
+            help="Lấy khóa API từ aistudio.google.com"
         )
+        if single_key:
+            api_keys = [single_key.strip()]
     else:
-        st.success("✅ Đã kết nối Gemini API tự động")
+        st.success(f"✅ Đã kết nối ({len(api_keys)} API Key)")
 
     st.divider()
     st.subheader("📋 Thông Tin Học Sinh")
@@ -57,7 +57,7 @@ with st.sidebar:
     grade_level = st.selectbox("Khối lớp:", ["Lớp 6", "Lớp 7", "Lớp 8", "Lớp 9"], index=2)
     topic = st.text_input("Chủ đề bài nói:", placeholder="Ví dụ: Unit 3 - Teenagers")
 
-# 4. Phân chia 2 Tab chính: [Chấm Bài] và [Lịch Sử Chấm]
+# 4. Phân chia 2 Tab
 tab_grade, tab_history = st.tabs(["📝 Chấm Bài Mới", "🔒 Lịch Sử Đã Chấm (Giáo Viên)"])
 
 # ================= TAB 1: DÀNH CHO HỌC SINH NỘP VÀ CHẤM BÀI =================
@@ -79,7 +79,7 @@ with tab_grade:
         st.audio(audio_source)
 
     if st.button("🚀 Bắt đầu chấm bài", type="primary"):
-        if not api_key:
+        if not api_keys:
             st.error("⚠️ Vui lòng cung cấp Gemini API Key để thực hiện chấm bài.")
         elif not student_name.strip():
             st.warning("⚠️ Vui lòng nhập Tên học sinh ở thanh bên trái trước khi bắt đầu chấm.")
@@ -88,7 +88,6 @@ with tab_grade:
         else:
             with st.spinner("AI đang lắng nghe và phân tích bài nói của học sinh... Vui lòng chờ vài giây!"):
                 try:
-                    client = genai.Client(api_key=api_key)
                     audio_bytes = audio_source.read()
 
                     system_instruction = (
@@ -114,14 +113,11 @@ with tab_grade:
 
                     user_prompt = f"Chấm bài nói của học sinh: {student_name.strip()} ({grade_level}), Đề tài: {topic.strip() or 'Tự do'}."
 
-                    # Danh sách các model dự phòng khi có tải cao (503)
-                   # ĐOẠN CODE MỚI:
-                    candidate_models = ["gemini-2.5-flash", "gemini-3.8-flash"]
-               response = None
+                    candidate_models = ["gemini-3.8-flash"]
+                    response = None
                     last_error = None
-                    candidate_models = ["gemini-3.8-flash", "gemini-3-flash"]
 
-                    # Thử lần lượt qua từng API Key và từng Model
+                    # Duyệt qua từng Key và Model
                     for key in api_keys:
                         try:
                             client = genai.Client(api_key=key)
@@ -149,7 +145,7 @@ with tab_grade:
                                             time.sleep(2)
                                             continue
                                         elif "404" in str(err):
-                                            break # Bỏ qua model nếu không tồn tại
+                                            break
                                         else:
                                             raise err
                                 if response is not None:
@@ -158,7 +154,6 @@ with tab_grade:
                                 break
                         except Exception as err:
                             last_error = err
-                            # Nếu key này bị hết hạn ngạch (429), nhảy sang key dự phòng tiếp theo
                             if "429" in str(err):
                                 continue
                             else:
@@ -170,7 +165,6 @@ with tab_grade:
                     result_text = response.text
                     timestamp_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
-                    # Lưu bài chấm vào tệp chia sẻ dùng chung
                     entry_data = {
                         "student": student_name.strip(),
                         "grade": grade_level,
@@ -185,8 +179,10 @@ with tab_grade:
                     st.markdown(result_text)
 
                 except Exception as e:
-                    if "503" in str(e):
-                        st.error("Hệ thống máy chủ AI đang có lượng truy cập cao. Em hãy bấm lại nút 'Bắt đầu chấm bài' sau khoảng 10 giây nhé!")
+                    if "429" in str(e):
+                        st.error("⚠️ Hệ thống chấm bài hôm nay đã đạt giới hạn lượt gọi miễn phí của máy chủ AI. Học sinh vui lòng thử lại sau hoặc gửi file qua cho cô giáo nhé!")
+                    elif "503" in str(e):
+                        st.error("⏳ Máy chủ AI đang tạm thời có lượng truy cập cao. Em hãy chờ khoảng 10-15 giây rồi bấm lại nút chấm bài nhé!")
                     else:
                         st.error(f"Đã xảy ra lỗi khi kết nối AI: {e}")
 
@@ -223,7 +219,6 @@ with tab_history:
 
         st.markdown("---")
 
-        # Đọc dữ liệu từ file dùng chung
         shared_history = load_history()
 
         if not shared_history:
